@@ -34,9 +34,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
-// Test SumUp connection
+// Test SumUp connection with detailed error info
 app.get('/test-sumup', async (req, res) => {
   try {
+    console.log('Testing SumUp with API Key:', SUMUP_API_KEY ? 'Present' : 'Missing');
+    
     const response = await axios.get(`${SUMUP_BASE_URL}/me`, {
       headers: {
         'Authorization': `Bearer ${SUMUP_API_KEY}`,
@@ -50,10 +52,48 @@ app.get('/test-sumup', async (req, res) => {
       merchant: response.data
     });
   } catch (error) {
+    console.error('SumUp API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      headers: error.response?.headers
+    });
+    
     res.status(500).json({
       status: 'error',
       message: error.message,
-      details: error.response?.data
+      statusCode: error.response?.status,
+      details: error.response?.data,
+      hint: 'Check if your API key is valid and has the correct permissions'
+    });
+  }
+});
+
+// Get OAuth token (if you have client credentials)
+app.get('/get-token', async (req, res) => {
+  try {
+    // This is for getting a new access token using client credentials
+    const response = await axios.post('https://api.sumup.com/token', {
+      grant_type: 'client_credentials',
+      client_id: SUMUP_CLIENT_ID,
+      client_secret: process.env.SUMUP_CLIENT_SECRET || ''
+    }, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    
+    res.json({
+      status: 'success',
+      message: 'Token generated',
+      token: response.data
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      details: error.response?.data,
+      hint: 'You might need a Client Secret for this'
     });
   }
 });
