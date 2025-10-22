@@ -144,9 +144,122 @@ app.get('/checkout', async (req, res) => {
       });
     }
 
-    // Redirect naar SumUp betaalpagina
-    const checkoutUrl = `https://api.sumup.com/v0.1/checkouts/${checkout.id}`;
-    res.redirect(checkoutUrl);
+    // Show payment page with SumUp Card Widget
+    res.send(`
+      <html>
+        <head>
+          <title>Betaling - €${amount}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <script src="https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js"></script>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              background: #f5f5f5;
+              padding: 20px;
+              margin: 0;
+            }
+            .container {
+              max-width: 500px;
+              margin: 0 auto;
+              background: white;
+              border-radius: 10px;
+              padding: 30px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            h1 {
+              text-align: center;
+              color: #333;
+              margin-bottom: 10px;
+            }
+            .amount {
+              text-align: center;
+              font-size: 48px;
+              font-weight: bold;
+              color: #000;
+              margin: 20px 0;
+            }
+            .description {
+              text-align: center;
+              color: #666;
+              margin-bottom: 30px;
+            }
+            #sumup-card {
+              margin: 20px 0;
+            }
+            .secure {
+              text-align: center;
+              color: #999;
+              font-size: 12px;
+              margin-top: 20px;
+            }
+            .error {
+              background: #ffebee;
+              color: #c62828;
+              padding: 15px;
+              border-radius: 5px;
+              margin: 20px 0;
+              display: none;
+            }
+            .success {
+              background: #e8f5e9;
+              color: #2e7d32;
+              padding: 15px;
+              border-radius: 5px;
+              margin: 20px 0;
+              display: none;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🛒 Afrekenen</h1>
+            <div class="amount">€${amount}</div>
+            <div class="description">Shopify Order ${order_id || ''}</div>
+            
+            <div id="error-message" class="error"></div>
+            <div id="success-message" class="success"></div>
+            
+            <div id="sumup-card"></div>
+            
+            <div class="secure">
+              🔒 Beveiligde betaling via SumUp
+            </div>
+          </div>
+
+          <script>
+            SumUpCard.mount({
+              checkoutId: '${checkout.id}',
+              onResponse: function(type, body) {
+                console.log('SumUp response:', type, body);
+                
+                const errorDiv = document.getElementById('error-message');
+                const successDiv = document.getElementById('success-message');
+                
+                switch(type) {
+                  case 'success':
+                    successDiv.style.display = 'block';
+                    successDiv.innerHTML = '✓ Betaling geslaagd! Je wordt doorgestuurd...';
+                    setTimeout(() => {
+                      window.location.href = '${return_url || APP_URL + '/payment/success'}?checkout_id=${checkout.id}';
+                    }, 2000);
+                    break;
+                    
+                  case 'error':
+                    errorDiv.style.display = 'block';
+                    errorDiv.innerHTML = '✗ Er ging iets mis: ' + (body.message || 'Probeer opnieuw');
+                    break;
+                    
+                  case 'invalid':
+                    errorDiv.style.display = 'block';
+                    errorDiv.innerHTML = '✗ Ongeldige gegevens. Controleer je invoer.';
+                    break;
+                }
+              }
+            });
+          </script>
+        </body>
+      </html>
+    `);
 
   } catch (error) {
     console.error('Error creating checkout:', error.message);
