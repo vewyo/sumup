@@ -106,32 +106,74 @@ app.get('/checkout', async (req, res) => {
     return res.status(400).send('Missing required parameters: amount and currency');
   }
 
+  const checkoutRef = `shopify-${order_id || Date.now()}`;
+
   try {
-    // Create checkout in SumUp
-    const checkoutData = {
-      checkout_reference: `shopify-${order_id || Date.now()}`,
-      amount: parseFloat(amount),
-      currency: currency.toUpperCase(),
-      pay_to_email: 'yurkovsergii@gmail.com',
-      description: `Shopify Order ${order_id || ''}`
-    };
+    let checkout = null;
+    let checkoutId = pendingOrders.get(checkoutRef);
 
-    console.log('Creating SumUp checkout:', checkoutData);
+    // Check if we already have a checkout for this order
+    if (checkoutId) {
+      try {
+        // Check status of existing checkout
+        const statusResponse = await axios.get(
+          `${SUMUP_BASE_URL}/checkouts/${checkoutId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${SUMUP_API_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
 
-    const sumupResponse = await axios.post(
-      `${SUMUP_BASE_URL}/checkouts`,
-      checkoutData,
-      {
-        headers: {
-          'Authorization': `Bearer ${SUMUP_API_KEY}`,
-          'Content-Type': 'application/json'
+        const existingCheckout = statusResponse.data;
+        console.log('Existing checkout status:', existingCheckout.status);
+
+        // Only reuse if checkout is still PENDING (not paid)
+        if (existingCheckout.status === 'PENDING') {
+          checkout = existingCheckout;
+          console.log('Reusing existing pending checkout:', checkoutId);
+        } else if (existingCheckout.status === 'PAID') {
+          // Checkout was paid, create a new one (this shouldn't happen but just in case)
+          console.log('Previous checkout was paid, creating new one');
+          checkoutId = null;
         }
+      } catch (error) {
+        // Checkout doesn't exist anymore or error, create new one
+        console.log('Error checking existing checkout, will create new one');
+        checkoutId = null;
       }
-    );
+    }
 
-    const checkout = sumupResponse.data;
-    
-    console.log('SumUp checkout created:', checkout);
+    // Create new checkout if we don't have a valid pending one
+    if (!checkout) {
+      const checkoutData = {
+        checkout_reference: checkoutRef,
+        amount: parseFloat(amount),
+        currency: currency.toUpperCase(),
+        pay_to_email: 'yurkovsergii@gmail.com',
+        description: `Shopify Order ${order_id || ''}`
+      };
+
+      console.log('Creating new SumUp checkout:', checkoutData);
+
+      const sumupResponse = await axios.post(
+        `${SUMUP_BASE_URL}/checkouts`,
+        checkoutData,
+        {
+          headers: {
+            'Authorization': `Bearer ${SUMUP_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      checkout = sumupResponse.data;
+      console.log('SumUp checkout created:', checkout.id);
+
+      // Save checkout ID for this reference
+      pendingOrders.set(checkoutRef, checkout.id);
+    }
     
     // Sla order info op
     if (order_id) {
@@ -208,6 +250,14 @@ app.get('/checkout', async (req, res) => {
               margin: 20px 0;
               display: none;
             }
+            .back-button {
+              display: block;
+              text-align: center;
+              color: #666;
+              text-decoration: none;
+              margin-top: 20px;
+              padding: 10px;
+            }
           </style>
         </head>
         <body>
@@ -224,6 +274,8 @@ app.get('/checkout', async (req, res) => {
             <div class="secure">
               🔒 Beveiligde betaling via SumUp
             </div>
+            
+            ${return_url ? `<a href="${return_url}" class="back-button">← Terug naar winkel</a>` : ''}
           </div>
 
           <script>
