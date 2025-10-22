@@ -145,14 +145,17 @@ app.get('/checkout', async (req, res) => {
       });
     }
 
-    // Show payment page with SumUp Card Widget
+    // Show payment page with customer details form and SumUp Card Widget
     res.send(`
       <html>
         <head>
-          <title>Betaling - €${amount}</title>
+          <title>Checkout - €${amount}</title>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <script src="https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js"></script>
           <style>
+            * {
+              box-sizing: border-box;
+            }
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
               background: #f5f5f5;
@@ -160,7 +163,7 @@ app.get('/checkout', async (req, res) => {
               margin: 0;
             }
             .container {
-              max-width: 500px;
+              max-width: 600px;
               margin: 0 auto;
               background: white;
               border-radius: 10px;
@@ -171,6 +174,7 @@ app.get('/checkout', async (req, res) => {
               text-align: center;
               color: #333;
               margin-bottom: 10px;
+              font-size: 28px;
             }
             .amount {
               text-align: center;
@@ -183,6 +187,51 @@ app.get('/checkout', async (req, res) => {
               text-align: center;
               color: #666;
               margin-bottom: 30px;
+              font-size: 14px;
+            }
+            .section {
+              margin: 30px 0;
+              padding: 20px 0;
+              border-top: 1px solid #e0e0e0;
+            }
+            .section:first-child {
+              border-top: none;
+              padding-top: 0;
+            }
+            .section-title {
+              font-size: 18px;
+              font-weight: 600;
+              color: #333;
+              margin-bottom: 15px;
+            }
+            .form-group {
+              margin-bottom: 15px;
+            }
+            label {
+              display: block;
+              font-size: 14px;
+              color: #555;
+              margin-bottom: 5px;
+              font-weight: 500;
+            }
+            input {
+              width: 100%;
+              padding: 12px;
+              border: 1px solid #ddd;
+              border-radius: 5px;
+              font-size: 14px;
+              font-family: inherit;
+            }
+            input:focus {
+              outline: none;
+              border-color: #000;
+            }
+            .form-row {
+              display: flex;
+              gap: 15px;
+            }
+            .form-row .form-group {
+              flex: 1;
             }
             #sumup-card {
               margin: 20px 0;
@@ -216,30 +265,122 @@ app.get('/checkout', async (req, res) => {
               text-decoration: none;
               margin-top: 20px;
               padding: 10px;
+              font-size: 14px;
+            }
+            .back-button:hover {
+              color: #000;
             }
           </style>
         </head>
         <body>
           <div class="container">
-            <h1>🛒 Afrekenen</h1>
+            <h1>🛒 Checkout</h1>
             <div class="amount">€${amount}</div>
-            <div class="description">Shopify Order ${order_id || ''}</div>
+            <div class="description">Order ${order_id || ''}</div>
             
             <div id="error-message" class="error"></div>
             <div id="success-message" class="success"></div>
             
-            <div id="sumup-card"></div>
-            
-            <div class="secure">
-              🔒 Beveiligde betaling via SumUp
+            <!-- Customer Details Section -->
+            <div class="section">
+              <div class="section-title">Customer Information</div>
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="firstName">First Name *</label>
+                  <input type="text" id="firstName" placeholder="John" required>
+                </div>
+                <div class="form-group">
+                  <label for="lastName">Last Name *</label>
+                  <input type="text" id="lastName" placeholder="Doe" required>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="email">Email Address *</label>
+                <input type="email" id="email" placeholder="john@example.com" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" placeholder="+31 6 12345678">
+              </div>
+            </div>
+
+            <!-- Billing Address Section -->
+            <div class="section">
+              <div class="section-title">Billing Address</div>
+              
+              <div class="form-group">
+                <label for="address">Street Address *</label>
+                <input type="text" id="address" placeholder="Street name and number" required>
+              </div>
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="postalCode">Postal Code *</label>
+                  <input type="text" id="postalCode" placeholder="1234 AB" required>
+                </div>
+                <div class="form-group">
+                  <label for="city">City *</label>
+                  <input type="text" id="city" placeholder="Amsterdam" required>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="country">Country *</label>
+                <input type="text" id="country" value="Netherlands" required>
+              </div>
+            </div>
+
+            <!-- Payment Section -->
+            <div class="section">
+              <div class="section-title">Payment Details</div>
+              <div id="sumup-card"></div>
             </div>
             
-            ${return_url ? `<a href="${return_url}" class="back-button">← Terug naar winkel</a>` : ''}
+            <div class="secure">
+              🔒 Secure payment powered by SumUp
+            </div>
+            
+            ${return_url ? `<a href="${return_url}" class="back-button">← Back to store</a>` : ''}
           </div>
 
           <script>
+            // Store customer data when payment is successful
+            let customerData = {};
+
+            function validateCustomerInfo() {
+              const firstName = document.getElementById('firstName').value.trim();
+              const lastName = document.getElementById('lastName').value.trim();
+              const email = document.getElementById('email').value.trim();
+              const address = document.getElementById('address').value.trim();
+              const postalCode = document.getElementById('postalCode').value.trim();
+              const city = document.getElementById('city').value.trim();
+              const country = document.getElementById('country').value.trim();
+              
+              if (!firstName || !lastName || !email || !address || !postalCode || !city || !country) {
+                return false;
+              }
+              
+              customerData = {
+                firstName,
+                lastName,
+                email,
+                phone: document.getElementById('phone').value.trim(),
+                address,
+                postalCode,
+                city,
+                country
+              };
+              
+              return true;
+            }
+
+            // Initialize SumUp Card Widget
             SumUpCard.mount({
               checkoutId: '${checkout.id}',
+              showSubmitButton: true,
               onResponse: function(type, body) {
                 console.log('SumUp response:', type, body);
                 
@@ -247,25 +388,58 @@ app.get('/checkout', async (req, res) => {
                 const successDiv = document.getElementById('success-message');
                 
                 switch(type) {
+                  case 'sent':
+                    // Validate customer info before processing
+                    if (!validateCustomerInfo()) {
+                      errorDiv.style.display = 'block';
+                      errorDiv.innerHTML = '✗ Please fill in all required fields';
+                      return;
+                    }
+                    break;
+                    
                   case 'success':
                     successDiv.style.display = 'block';
-                    successDiv.innerHTML = '✓ Betaling geslaagd! Je wordt doorgestuurd...';
+                    successDiv.innerHTML = '✓ Payment successful! Redirecting...';
+                    
+                    // Save customer data (you can send this to your backend)
+                    console.log('Customer data:', customerData);
+                    
                     setTimeout(() => {
-                      window.location.href = '${return_url || APP_URL + '/payment/success'}?checkout_id=${checkout.id}';
+                      const returnUrl = '${return_url || APP_URL + '/payment/success'}';
+                      const separator = returnUrl.includes('?') ? '&' : '?';
+                      window.location.href = returnUrl + separator + 'checkout_id=${checkout.id}';
                     }, 2000);
                     break;
                     
                   case 'error':
                     errorDiv.style.display = 'block';
-                    errorDiv.innerHTML = '✗ Er ging iets mis: ' + (body.message || 'Probeer opnieuw');
+                    errorDiv.innerHTML = '✗ Payment failed: ' + (body.message || 'Please try again');
                     break;
                     
                   case 'invalid':
                     errorDiv.style.display = 'block';
-                    errorDiv.innerHTML = '✗ Ongeldige gegevens. Controleer je invoer.';
+                    errorDiv.innerHTML = '✗ Invalid payment details. Please check your card information.';
                     break;
                 }
               }
+            });
+
+            // Add input validation styling
+            const inputs = document.querySelectorAll('input[required]');
+            inputs.forEach(input => {
+              input.addEventListener('blur', function() {
+                if (!this.value.trim()) {
+                  this.style.borderColor = '#f44336';
+                } else {
+                  this.style.borderColor = '#ddd';
+                }
+              });
+              
+              input.addEventListener('input', function() {
+                if (this.value.trim()) {
+                  this.style.borderColor = '#4CAF50';
+                }
+              });
             });
           </script>
         </body>
@@ -281,11 +455,11 @@ app.get('/checkout', async (req, res) => {
       <html>
         <head><title>Payment Error</title></head>
         <body style="font-family: Arial; text-align: center; padding: 50px;">
-          <h1>Er is een fout opgetreden</h1>
-          <p>We konden de betaling niet starten. Probeer het opnieuw.</p>
+          <h1>An error occurred</h1>
+          <p>We could not start the payment. Please try again.</p>
           <p style="color: #666; font-size: 14px;">${error.message}</p>
           <p style="color: #999; font-size: 12px;">${JSON.stringify(error.response?.data || {})}</p>
-          ${return_url ? `<a href="${return_url}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #000; color: #fff; text-decoration: none; border-radius: 5px;">Terug naar winkel</a>` : ''}
+          ${return_url ? `<a href="${return_url}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #000; color: #fff; text-decoration: none; border-radius: 5px;">Back to store</a>` : ''}
         </body>
       </html>
     `);
@@ -299,7 +473,7 @@ app.get('/payment/success', (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>Betaling Geslaagd</title>
+        <title>Payment Successful</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -336,11 +510,11 @@ app.get('/payment/success', (req, res) => {
       <body>
         <div class="success-box">
           <div class="checkmark">✓</div>
-          <h1>Betaling Geslaagd!</h1>
-          <p>Je betaling is succesvol verwerkt.</p>
-          <p>Je ontvangt een bevestiging per e-mail.</p>
+          <h1>Payment Successful!</h1>
+          <p>Your payment has been processed successfully.</p>
+          <p>You will receive a confirmation email shortly.</p>
           ${checkout_id ? `<p style="font-size: 12px; color: #999;">Checkout ID: ${checkout_id}</p>` : ''}
-          <a href="#" class="button" onclick="window.close()">Sluiten</a>
+          <a href="#" class="button" onclick="window.close()">Close</a>
         </div>
       </body>
     </html>
@@ -352,7 +526,7 @@ app.get('/payment/failure', (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>Betaling Mislukt</title>
+        <title>Payment Failed</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -389,10 +563,10 @@ app.get('/payment/failure', (req, res) => {
       <body>
         <div class="error-box">
           <div class="cross">✗</div>
-          <h1>Betaling Mislukt</h1>
-          <p>Je betaling kon niet worden verwerkt.</p>
-          <p>Probeer het opnieuw of kies een andere betaalmethode.</p>
-          <a href="#" class="button" onclick="window.history.back()">Opnieuw proberen</a>
+          <h1>Payment Failed</h1>
+          <p>Your payment could not be processed.</p>
+          <p>Please try again or choose a different payment method.</p>
+          <a href="#" class="button" onclick="window.history.back()">Try Again</a>
         </div>
       </body>
     </html>
